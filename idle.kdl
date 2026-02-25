@@ -1,0 +1,18 @@
+layout {
+    pane size=1 split_direction="vertical" {
+        pane borderless=true {
+            plugin location="zellij:tab-bar"
+        }
+        pane size=15 borderless=true {
+            plugin location="file:~/.config/zellij/plugins/zellij-idle.wasm" {
+                idle_timeout_secs "300"
+                countdown_secs "60"
+                suspend_action "suspend"
+            }
+        }
+    }
+    pane
+    pane size=1 borderless=true {
+        plugin location="zellij:status-bar"
+    }
+}

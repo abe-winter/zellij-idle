@@ -147,6 +147,12 @@ This is a list of tasks; can you mark them with a `[x]` when finished? write a (
 
 9. improve Claude Code "thinking" detection — the current child-process heuristic only detects tool execution (bash, file writes spawn children). When Claude Code is thinking/streaming an API response, it's just the main node process with no children, so it's incorrectly classified as idle. Possible signals: `/proc/<pid>/io` read_bytes delta (network activity from API streaming), CPU usage from `/proc/<pid>/stat` utime+stime delta, or checking for open TCP connections to anthropic API endpoints. This is safe-ish to get wrong (suspending mid-thought will resume and retry) but would be more correct.
 
+10. when the gcloud command is not present, can you show the text `!gcloud` in red in the UI?
+
+11. github workflows to:
+	- build the wasm file on push
+	- attach a zip to the release that has the wasm and layout in a foldered tarball so you can just unpack it in ~/.config/zellij and get the locations specified in README.md
+
 ## future
 
 tasks in this section need clarification before starting

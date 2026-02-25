@@ -137,9 +137,11 @@ This is a list of tasks; can you mark them with a `[x]` when finished? write a (
 	- if not, consider a config to sleep some processes by CPU usage
 	- if that's not viable, add a config to simply ignore some processes for the purposes of idle detection
 
-7. add logging somewhere so we can debug sleep / don't-sleep decisions. logs should at minimum:
+7. [x] add logging somewhere so we can debug sleep / don't-sleep decisions. logs should at minimum:
 	- say which process(es) are keeping the system awake
 	- log some granular information about the claude code special case (because this is edge-case-y; I'm guessing we'll get this wrong at first and also the idle signal will change as the claude code chat UI itself evolves)
+
+	All logging via `eprintln!` → zellij's log at `/tmp/zellij-*/zellij-log/zellij.log`. Logs: config on load, every poll result with per-pane breakdown (pid, fg process, claude annotations), state transitions (IDLE/ACTIVE/COUNTDOWN), input resets, suspend command results. Claude Code panes show `(claude-idle)` or `(claude-working)` in the poll output.
 
 8. walk me through testing your suspend/stop approach (not doing this inline with task 5 because my dev box is busy and can't be restarted right now)
 

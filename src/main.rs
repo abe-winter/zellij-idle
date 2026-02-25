@@ -225,6 +225,12 @@ impl ZellijPlugin for State {
             EventType::InputReceived,
         ]);
 
+        eprintln!(
+            "zellij-idle: loaded config: idle_timeout={}s, countdown={}s, suspend_action={}, claude_detect={}, ignore={:?}, zellij_pid={}",
+            self.idle_timeout_secs, self.countdown_secs, self.suspend_action,
+            self.claude_code_idle_detection, self.ignore_processes, self.zellij_pid
+        );
+
         set_timeout(1.0);
     }
 
@@ -252,6 +258,10 @@ impl ZellijPlugin for State {
                     } else if self.is_idle && self.idle_elapsed_secs >= self.idle_timeout_secs {
                         self.countdown_active = true;
                         self.countdown_remaining = self.countdown_secs;
+                        eprintln!(
+                            "zellij-idle: -> COUNTDOWN (idle for {}s >= threshold {}s, countdown={}s)",
+                            self.idle_elapsed_secs as u64, self.idle_timeout_secs as u64, self.countdown_secs as u64
+                        );
                     }
 
                     self.run_idle_check();
@@ -285,6 +295,11 @@ impl ZellijPlugin for State {
                 true
             }
             Event::InputReceived => {
+                if self.countdown_active {
+                    eprintln!("zellij-idle: input received, cancelling countdown");
+                } else if self.is_idle {
+                    eprintln!("zellij-idle: input received, resetting idle timer");
+                }
                 self.last_activity_poll_count = self.poll_count;
                 self.idle_elapsed_secs = 0.0;
                 self.is_idle = false;
@@ -396,6 +411,8 @@ impl State {
         let output = String::from_utf8_lossy(stdout);
         let mut active_count = 0;
         let mut active_procs = Vec::new();
+        let mut idle_details = Vec::new();
+        let mut active_details = Vec::new();
         let mut total_panes = 0;
 
         for line in output.lines() {
@@ -413,20 +430,40 @@ impl State {
             if parts[0] == "active" {
                 active_count += 1;
                 let proc_name = parts[2].trim();
+                active_details.push(format!("pid={} fg={}", parts[1], proc_name));
                 if !proc_name.is_empty() && proc_name != "unknown" {
                     active_procs.push(proc_name.to_string());
                 }
+            } else {
+                idle_details.push(format!("pid={} {}", parts[1], parts[2].trim()));
             }
         }
 
+        eprintln!(
+            "zellij-idle: poll #{}: {}/{} panes active | active=[{}] idle=[{}]",
+            self.poll_count,
+            active_count,
+            total_panes,
+            active_details.join(", "),
+            idle_details.join(", ")
+        );
+
+        let was_idle = self.is_idle;
         self.active_pane_count = active_count;
         self.active_processes = active_procs;
 
         if active_count == 0 && total_panes > 0 {
             if !self.is_idle {
                 self.is_idle = true;
+                eprintln!("zellij-idle: -> IDLE (all {} panes idle)", total_panes);
             }
         } else if active_count > 0 {
+            if was_idle || self.countdown_active {
+                eprintln!(
+                    "zellij-idle: -> ACTIVE (keeping awake: {})",
+                    self.active_processes.join(", ")
+                );
+            }
             self.is_idle = false;
             self.idle_elapsed_secs = 0.0;
             self.last_activity_poll_count = self.poll_count;

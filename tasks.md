@@ -141,9 +141,11 @@ This is a list of tasks; can you mark them with a `[x]` when finished? write a (
 	- say which process(es) are keeping the system awake
 	- log some granular information about the claude code special case (because this is edge-case-y; I'm guessing we'll get this wrong at first and also the idle signal will change as the claude code chat UI itself evolves)
 
-	All logging via `eprintln!` → zellij's log at `/tmp/zellij-*/zellij-log/zellij.log`. Logs: config on load, every poll result with per-pane breakdown (pid, fg process, claude annotations), state transitions (IDLE/ACTIVE/COUNTDOWN), input resets, suspend command results. Claude Code panes show `(claude-idle)` or `(claude-working)` in the poll output.
+	Persistent log at `~/.local/share/zellij-idle/zellij-idle.log` (survives reboot/stop). Also echoes to zellij's stderr log. Logs: config on load, every poll result with per-pane breakdown (pid, fg process, claude annotations), state transitions (IDLE/ACTIVE/COUNTDOWN), input resets, suspend command results. Claude Code panes show `(claude-idle)` or `(claude-working)` in the poll output. Timestamps added by bash on flush.
 
 8. walk me through testing your suspend/stop approach (not doing this inline with task 5 because my dev box is busy and can't be restarted right now)
+
+9. improve Claude Code "thinking" detection — the current child-process heuristic only detects tool execution (bash, file writes spawn children). When Claude Code is thinking/streaming an API response, it's just the main node process with no children, so it's incorrectly classified as idle. Possible signals: `/proc/<pid>/io` read_bytes delta (network activity from API streaming), CPU usage from `/proc/<pid>/stat` utime+stime delta, or checking for open TCP connections to anthropic API endpoints. This is safe-ish to get wrong (suspending mid-thought will resume and retry) but would be more correct.
 
 ## future
 

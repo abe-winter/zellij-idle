@@ -6,6 +6,16 @@ const DEFAULT_IDLE_TIMEOUT_SECS: f64 = 300.0;
 const DEFAULT_COUNTDOWN_SECS: f64 = 60.0;
 const DEFAULT_SUSPEND_ACTION: &str = "suspend";
 
+// Bash script to flush log lines to a persistent file.
+// $1 = log content (newline-separated lines)
+// Prepends a timestamp to each line.
+const LOG_FLUSH_SCRIPT: &str = r#"
+dir="$HOME/.local/share/zellij-idle"
+mkdir -p "$dir"
+ts=$(date '+%Y-%m-%d %H:%M:%S')
+printf '%s\n' "$1" | sed "s/^/$ts /" >> "$dir/zellij-idle.log"
+"#;
+
 // Inline bash script for idle detection.
 // Finds direct children of zellij, checks /proc/<pid>/stat to determine
 // if the shell is the foreground process (idle) or something else is running (active).
@@ -153,6 +163,9 @@ struct State {
     suspend_action: String,
     claude_code_idle_detection: bool,
     ignore_processes: Vec<String>,
+
+    // Log buffer — flushed to ~/.local/share/zellij-idle/zellij-idle.log each poll
+    log_buffer: Vec<String>,
 }
 
 impl Default for State {
@@ -175,6 +188,7 @@ impl Default for State {
             suspend_action: String::new(),
             claude_code_idle_detection: true,
             ignore_processes: Vec::new(),
+            log_buffer: Vec::new(),
         }
     }
 }
@@ -225,11 +239,12 @@ impl ZellijPlugin for State {
             EventType::InputReceived,
         ]);
 
-        eprintln!(
-            "zellij-idle: loaded config: idle_timeout={}s, countdown={}s, suspend_action={}, claude_detect={}, ignore={:?}, zellij_pid={}",
+        self.log(format!(
+            "loaded config: idle_timeout={}s, countdown={}s, suspend_action={}, claude_detect={}, ignore={:?}, zellij_pid={}",
             self.idle_timeout_secs, self.countdown_secs, self.suspend_action,
             self.claude_code_idle_detection, self.ignore_processes, self.zellij_pid
-        );
+        ));
+        self.flush_logs();
 
         set_timeout(1.0);
     }
@@ -258,13 +273,14 @@ impl ZellijPlugin for State {
                     } else if self.is_idle && self.idle_elapsed_secs >= self.idle_timeout_secs {
                         self.countdown_active = true;
                         self.countdown_remaining = self.countdown_secs;
-                        eprintln!(
-                            "zellij-idle: -> COUNTDOWN (idle for {}s >= threshold {}s, countdown={}s)",
+                        self.log(format!(
+                            "-> COUNTDOWN (idle for {}s >= threshold {}s, countdown={}s)",
                             self.idle_elapsed_secs as u64, self.idle_timeout_secs as u64, self.countdown_secs as u64
-                        );
+                        ));
                     }
 
                     self.run_idle_check();
+                    self.flush_logs();
                 } else {
                     self.loaded = true;
                 }
@@ -278,16 +294,15 @@ impl ZellijPlugin for State {
                         let out = String::from_utf8_lossy(&stdout);
                         let err = String::from_utf8_lossy(&stderr);
                         if exit_code != Some(0) {
-                            eprintln!(
-                                "zellij-idle: suspend command failed (exit {:?}): stdout={}, stderr={}",
-                                exit_code,
-                                out.trim(),
-                                err.trim()
-                            );
+                            self.log(format!(
+                                "suspend command failed (exit {:?}): stdout={}, stderr={}",
+                                exit_code, out.trim(), err.trim()
+                            ));
                         } else {
-                            eprintln!("zellij-idle: suspend command succeeded: {}", out.trim());
+                            self.log(format!("suspend command succeeded: {}", out.trim()));
                         }
                     }
+                    Some("log") => {} // ignore log flush results
                     _ => {
                         self.parse_idle_check_output(&stdout);
                     }
@@ -296,9 +311,9 @@ impl ZellijPlugin for State {
             }
             Event::InputReceived => {
                 if self.countdown_active {
-                    eprintln!("zellij-idle: input received, cancelling countdown");
+                    self.log("input received, cancelling countdown".to_string());
                 } else if self.is_idle {
-                    eprintln!("zellij-idle: input received, resetting idle timer");
+                    self.log("input received, resetting idle timer".to_string());
                 }
                 self.last_activity_poll_count = self.poll_count;
                 self.idle_elapsed_secs = 0.0;
@@ -362,6 +377,25 @@ impl ZellijPlugin for State {
 }
 
 impl State {
+    fn log(&mut self, msg: String) {
+        eprintln!("zellij-idle: {}", msg);
+        self.log_buffer.push(msg);
+    }
+
+    fn flush_logs(&mut self) {
+        if self.log_buffer.is_empty() {
+            return;
+        }
+        let content = self.log_buffer.join("\n");
+        self.log_buffer.clear();
+        let mut context = BTreeMap::new();
+        context.insert("command".to_string(), "log".to_string());
+        run_command(
+            &["bash", "-c", LOG_FLUSH_SCRIPT, "_", &content],
+            context,
+        );
+    }
+
     fn run_idle_check(&self) {
         let pid_str = self.zellij_pid.to_string();
         let claude_detect = if self.claude_code_idle_detection {
@@ -393,7 +427,7 @@ impl State {
         self.suspend_command_sent = true;
 
         if self.suspend_action == "none" {
-            eprintln!("zellij-idle: suspend_action is 'none', skipping gcloud command");
+            self.log("suspend_action is 'none', skipping gcloud command".to_string());
             return;
         }
 
@@ -402,6 +436,7 @@ impl State {
             _ => "suspend",
         };
 
+        self.log(format!("triggering suspend (action={})", action));
         let mut context = BTreeMap::new();
         context.insert("command".to_string(), "suspend".to_string());
         run_command(&["bash", "-c", SUSPEND_SCRIPT, "_", action], context);
@@ -439,14 +474,14 @@ impl State {
             }
         }
 
-        eprintln!(
-            "zellij-idle: poll #{}: {}/{} panes active | active=[{}] idle=[{}]",
+        self.log(format!(
+            "poll #{}: {}/{} panes active | active=[{}] idle=[{}]",
             self.poll_count,
             active_count,
             total_panes,
             active_details.join(", "),
             idle_details.join(", ")
-        );
+        ));
 
         let was_idle = self.is_idle;
         self.active_pane_count = active_count;
@@ -455,14 +490,14 @@ impl State {
         if active_count == 0 && total_panes > 0 {
             if !self.is_idle {
                 self.is_idle = true;
-                eprintln!("zellij-idle: -> IDLE (all {} panes idle)", total_panes);
+                self.log(format!("-> IDLE (all {} panes idle)", total_panes));
             }
         } else if active_count > 0 {
             if was_idle || self.countdown_active {
-                eprintln!(
-                    "zellij-idle: -> ACTIVE (keeping awake: {})",
+                self.log(format!(
+                    "-> ACTIVE (keeping awake: {})",
                     self.active_processes.join(", ")
-                );
+                ));
             }
             self.is_idle = false;
             self.idle_elapsed_secs = 0.0;

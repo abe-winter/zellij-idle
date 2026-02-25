@@ -122,11 +122,15 @@ This is a list of tasks; can you mark them with a `[x]` when finished? write a (
 		- otherwise do it some other way
 	- I'll test at the end of this task
 
-4. if simple, place the UI in the existing top status bar rather than adding an entire new line to the UI
+4. [x] if simple, place the UI in the existing top status bar rather than adding an entire new line to the UI
 
-5. basic system suspend implementation: integrate your planned gcloud instance suspend / stop command into the plugin
+	Plugin now shares the top row with tab-bar via `split_direction="vertical"` (24-col fixed width on the right). Render is compact: just process names (blue), `IDLE 45s` (green), `SUSPEND 42s` (yellow), `SUSPEND!` (red).
 
-6. special idle detection for claude code
+5. [x] basic system suspend implementation: integrate your planned gcloud instance suspend / stop command into the plugin
+
+	Added `SUSPEND_SCRIPT` that fetches VM metadata and runs `gcloud compute instances suspend` with stop fallback. Fires via `trigger_suspend()` when countdown hits zero. Config: `suspend_action` = "suspend" (default), "stop", or "none". Commands are context-tagged to distinguish from idle check results.
+
+6. [x] special idle detection for claude code
 	- claude code is a chat interface that the user will forget to close, but sometimes it is actually awake and doing work
 	- can we distinguish between these two cases? how? subprocesses, some kind of state written by claude itself, growth of session logs, draw events on the virtual terminal?
 	- if there's a good deterministic signal, add a config for it and detect it

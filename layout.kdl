@@ -1,0 +1,15 @@
+layout {
+    pane size=1 borderless=true {
+        plugin location="zellij:tab-bar"
+    }
+    pane
+    pane size=1 borderless=true {
+        plugin location="file:target/wasm32-wasip1/debug/zellij-idle.wasm" {
+            idle_timeout_secs "30"
+            countdown_secs "15"
+        }
+    }
+    pane size=1 borderless=true {
+        plugin location="zellij:status-bar"
+    }
+}

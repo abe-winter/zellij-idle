@@ -32,7 +32,5 @@ jobs:
       - name: Create GitHub release
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
         with:
-          files: |
-            zellij-idle-${{ github.ref_name }}.tar.gz
-            target/wasm32-wasip1/release/zellij-idle.wasm
+          files: zellij-idle-${{ github.ref_name }}.tar.gz
           generate_release_notes: true

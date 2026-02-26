@@ -156,6 +156,7 @@ struct State {
 
     // Suspend command state
     suspend_command_sent: bool,
+    gcloud_missing: bool,
 
     // Config (from layout.kdl)
     idle_timeout_secs: f64,
@@ -183,6 +184,7 @@ impl Default for State {
             countdown_remaining: 0.0,
             suspend_triggered: false,
             suspend_command_sent: false,
+            gcloud_missing: false,
             idle_timeout_secs: 0.0,
             countdown_secs: 0.0,
             suspend_action: String::new(),
@@ -246,6 +248,13 @@ impl ZellijPlugin for State {
         ));
         self.flush_logs();
 
+        // Check if gcloud is available
+        if self.suspend_action != "none" {
+            let mut context = BTreeMap::new();
+            context.insert("command".to_string(), "gcloud_check".to_string());
+            run_command(&["which", "gcloud"], context);
+        }
+
         set_timeout(1.0);
     }
 
@@ -302,6 +311,12 @@ impl ZellijPlugin for State {
                             self.log(format!("suspend command succeeded: {}", out.trim()));
                         }
                     }
+                    Some("gcloud_check") => {
+                        if exit_code != Some(0) {
+                            self.gcloud_missing = true;
+                            self.log("gcloud CLI not found on PATH".to_string());
+                        }
+                    }
                     Some("log") => {} // ignore log flush results
                     _ => {
                         self.parse_idle_check_output(&stdout);
@@ -331,6 +346,18 @@ impl ZellijPlugin for State {
     fn render(&mut self, _rows: usize, cols: usize) {
         if !self.loaded {
             print!("loading");
+            return;
+        }
+
+        if self.gcloud_missing {
+            let msg = "!gcloud";
+            let truncated = &msg[..msg.len().min(cols)];
+            let padding = cols.saturating_sub(truncated.len());
+            print!(
+                "\x1b[31;1m{}{}\x1b[0m",
+                truncated,
+                " ".repeat(padding)
+            );
             return;
         }
 

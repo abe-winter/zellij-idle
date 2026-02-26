@@ -1,0 +1,37 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build release
+        run: cargo build --release
+
+      - name: Package release tarball
+        run: |
+          mkdir -p zellij-idle/plugins zellij-idle/layouts
+          cp target/wasm32-wasip1/release/zellij-idle.wasm zellij-idle/plugins/
+          cp idle.kdl zellij-idle/layouts/idle.kdl
+          tar czf zellij-idle-${{ github.ref_name }}.tar.gz zellij-idle/
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            zellij-idle-${{ github.ref_name }}.tar.gz
+            target/wasm32-wasip1/release/zellij-idle.wasm
+          generate_release_notes: true

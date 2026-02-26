@@ -157,6 +157,8 @@ This is a list of tasks; can you mark them with a `[x]` when finished? write a (
 
 	Two workflows: `build.yml` (on push/PR to main, builds + uploads artifact) and `release.yml` (on `v*` tag, builds + creates GitHub release with `.wasm` and tarball containing `plugins/zellij-idle.wasm` + `layouts/idle.kdl` — unpack into `~/.config/zellij/`).
 
+12. notify the user on slack when suspending
+
 ## future
 
 tasks in this section need clarification before starting
